@@ -1,0 +1,38 @@
+---
+- name: Check if Apache is running
+  ansible.builtin.service_facts:
+  register: service_status
+
+- name: Get Apache listening ports
+  ansible.builtin.shell: "ss -tulnp | grep httpd || true"
+  register: apache_ports
+  changed_when: false
+  tags: check
+
+- name: Restart Apache if not running properly
+  ansible.builtin.service:
+    name: "{{ apache_service_name }}"
+    state: restarted
+    enabled: yes
+  when: >
+    ('httpd' not in service_status.services) or
+    (apache_ports.stdout | length == 0) or
+    (emergency_restart | bool)
+  notify:
+    - wait for apache
+    - validate apache
+  tags: restart
+
+- name: Ensure default page is present
+  ansible.builtin.copy:
+    dest: /var/www/html/index.html
+    content: |
+      <html>
+        <body>
+          <h1>Apache on {{ ansible_hostname }}</h1>
+          <p>Managed by Ansible</p>
+        </body>
+      </html>
+    owner: root
+    group: root
+    mode: 0644
